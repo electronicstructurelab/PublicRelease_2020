@@ -10,16 +10,19 @@ C> @param gvec : FOD forces
 C> @param msite(2) : This array holds numbers of FODs for spin up/down. 
          subroutine fod_opt(energy,fod_converge)
 !        subroutine electronic_geometry(energy)
-         use global_inputs,only : fod_opt1,fod_opt2,fod_opt3
+         use global_inputs,only : fod_opt1,fod_opt2,fod_opt3,
+     &                            symmetrymodule1
          use xmol,only : AU2ANG,NUM_ATMS,XMOL_LIST,GET_LETTER
          implicit real*8 (a-h,o-z)
          !INCLUDE  'PARAMA2' not yet.
          logical exist,reset,exist1
          logical fod_converge
-         dimension msite(2)
+         parameter(mxidt=500)
+         dimension msite(2),nidt(2)
          dimension r(3,1000),f(3,1000),d2inv(1000),suggest(1000)
          dimension xvec(3000),gvec(3000)
          dimension scrv(18000)
+         dimension nwht(mxidt*2),nequiv(120,mxidt*2)
 
 C LBFGS
          double precision :: DGUESS,ACCSOLN,XTOL
@@ -45,7 +48,6 @@ C LBFGS
          allocate(species(NUM_ATMS))
 
 
-
          do i=1,1000
            d2inv  (i)=1.0d0
            suggest(i)=1.0d0
@@ -64,10 +66,19 @@ C LBFGS
          if(.not.exist)then
           open(90,file='FRMORB')
           open(91,file='fforce.dat')
-          read(90,*)msite(1),msite(2)
+          if(symmetrymodule1) then
+            read(90,*)(nidt(i), msite(i),  i=1,2)
+          else !legacy format
+            read(90,*)msite(1),msite(2)
+          endif
           nopt=0
+c
+c  KAJ 6-22-2023 -- Do we need FRMORB to have info about FOD symmetry?
+c
           do if=1,msite(1)+msite(2)
-           read(90,*)(r(j,if),j=1,3)
+!           read(90,*)(r(j,if),j=1,3)
+            read(90,*)(r(j,if),j=1,3),nwht(if),
+     &          (nequiv(i,if),i=1,   nwht(if))
            read(91,*)(f(j,if),j=1,3)
           end do
           close(90)
@@ -386,11 +397,17 @@ c        print*,'istat:',istat
          inquire(file='FRMIDT',exist=exist) !YY recheck if FRMIDT is there 
          if(.not.exist)then
            open(90,file='FRMORB')
+           rewind(90)
+           if(symmetrymodule1) then
+             write(90,*) (nidt(i),msite(i),i=1,2)
+           else !legacy format
+             write(90,*)msite(1),msite(2)
+           endif
          else
            open(90,file='FRMIDT')
+           rewind(90)
+           write(90,*)msite(1),msite(2)
          end if
-         rewind(90)
-         write(90,*)msite(1),msite(2)
 
          nopt=0
          do ig=1,msite(1)+msite(2)
@@ -402,9 +419,15 @@ c        print*,'istat:',istat
            end do
 c           print*,'frozenif',frozen(if)
           end if
+          if(.not.exist)then !FRMORB
+c           write(90,*) (r(j,ig),j=1,3)
+           write(90,101)(r(j,ig),j=1,3),nwht(ig),
+     &             (nequiv(i,ig),i=1,   nwht(ig))
+          else !FRMIDT
            write(90,90)(r(j,ig),j=1,3),int(frozen(ig)),
-     &                  d2inv(ig),suggest(ig)
+     &                d2inv(ig),suggest(ig)
            !print*,"New FOD position",(r(j,if),j=1,3)
+          end if
          end do
          close(90)
 c        call system('echo "0 1" >  RUNS')
@@ -412,6 +435,7 @@ c        call system('echo "4 4" >> RUNS')
 c        call system('echo "0  " >> RUNS')
          !call stopit
  90      format(3d20.12,I3,'  D2INV=',F12.4,' SUGGEST= ',F12.4)
+101      format(' ',3F20.10,' ',I4,120I4)
 
 
          end

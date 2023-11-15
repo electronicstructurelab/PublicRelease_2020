@@ -243,9 +243,9 @@ c
           IGGA(2)=I2
 
         IF (POTEN) THEN
-c%ifdef MPI 
+c#ifdef MPI 
 c        CALL SENDDATA(102)
-c%endif
+c#endif
         CALL COUPOT1
         ENDIF
 
